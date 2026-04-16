@@ -1,0 +1,34 @@
+# Build system: scikit-build-core replaces the older setup.py approach.
+# It calls CMake under the hood, which compiles our C++ extension.
+# pybind11 is needed at build time for its CMake config and headers.
+[build-system]
+requires = ["scikit-build-core>=0.12.2", "pybind11>=3.0.3"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "fast-tsp"
+# Version exists in three places: here, __init__.py, and _native.cpp.
+# tests/test_version.py checks they all agree.
+version = "0.1.0"
+description = "Example: moving a hot Python loop to C++ via pybind11"
+# 3.10+ for modern type hints (list[int] instead of List[int]).
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.scikit-build]
+# Pins default behaviors to the version in build-system.requires,
+# so future scikit-build-core releases don't silently change behavior.
+minimum-version = "build-system.requires"
+# Explicit package location — avoids auto-discovery ambiguity.
+wheel.packages = ["src/fast_tsp"]
+# Use a per-platform build directory so different Python versions
+# or architectures don't clobber each other's build artifacts.
+build-dir = "build/{wheel_tag}"
+
+[tool.scikit-build.cmake]
+# Build in Release mode so the C++ extension is compiled with
+# platform-appropriate optimization flags (-O3 on GCC/Clang, /O2 on MSVC).
+build-type = "Release"

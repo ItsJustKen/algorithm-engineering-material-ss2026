@@ -20,11 +20,13 @@ logging.basicConfig(
 log = logging.getLogger("solver")
 
 log.info("Loading instance: nodes=%d, edges=%d", n_nodes, n_edges)
-# ... loading code ...
-log.info("Computing greedy upper bound")
-# ... heuristic code ...
-log.info("Starting solver")
-# ... solver code ...
+graph = build_graph(...)
+log.info("Graph built: density=%.2f", density)
+ub = greedy_upper_bound(graph)
+log.info("Upper bound found: colors=%d", ub)
+result = solve(graph, ub)
+log.info("Solver finished: colors=%d, optimal=%s", result.n_colors, result.optimal)
+write_solution(result)
 log.info("Done")
 ```
 
@@ -37,13 +39,9 @@ That is often enough to identify the slow phase.
 
 ```text
 16:58:12 Loading instance: nodes=500, edges=12340
-16:58:12 Building graph
-16:58:12 Graph built: nodes=500, edges=12340, density=0.10
-16:58:12 Computing greedy upper bound
+16:58:12 Graph built: density=0.10
 16:58:16 Upper bound found: colors=12
-16:58:16 Starting solver
 16:58:18 Solver finished: colors=8, optimal=True
-16:58:18 Writing solution
 16:58:18 Done
 ```
 
