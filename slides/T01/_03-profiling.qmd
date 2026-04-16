@@ -1,0 +1,234 @@
+<!-- Sources for Profiling:
+     - Profiler taxonomy, tracing vs sampling, cProfile, Scalene:
+       ../deep-research-report-profilers.md (§2-3)
+     - Scalene usage, --program-path, Windows caveat:
+       /home/krupke/Repositories/AlgLab-WS2526-material/sheets/01_cpsat/exercises/01_profiling_exercise/README.md
+     - Scalene screenshot: ../images/scalene_example.png (from AlgLab exercise)
+     - Tracing vs sampling diagram: generated with matplotlib (gen_tracing_sampling.py)
+     - Python profiling workflow: ../python-benchmarking.md §4-7
+     - perf stat output: measured on Ryzen 9 9900X running
+       examples/google_benchmark/build/benchmarks/bm_graph
+-->
+# Profiling {background-image="assets/symbol_profiling.png" background-opacity="0.3" background-size="cover" background-color="#2d4059"}
+
+Logging tells us **where to look**.
+Profilers tell us **how the cost is distributed inside the code**.
+
+## Two big families
+
+![](assets/tracing_vs_sampling.png){width="95%"}
+
+:::: {.columns}
+
+::: {.column width="48%"}
+**Tracing / instrumentation**
+
+- record every call or event
+- exact call counts, higher overhead
+- Python example: `cProfile`
+:::
+
+::: {.column width="4%"}
+:::
+
+::: {.column width="48%"}
+::: {.fragment}
+**Sampling**
+
+- interrupt periodically
+- statistical estimate, lower overhead
+- Python example: `Scalene`
+:::
+:::
+
+::::
+
+## What does "time" even mean?
+
+::: {.incremental}
+- **CPU time**: time while the program is actually running on CPU
+- **wall-clock time**: elapsed real time, including waiting
+- **on-CPU profiles** can miss I/O waits and blocking
+- mixed Python/native systems may need a split like **Python vs native vs system**
+:::
+
+::: {.fragment}
+If a Python program spends a lot of time waiting or inside native libraries,
+**the profiler must match that reality.**
+:::
+
+## A practical rule of thumb
+
+::: {.incremental}
+1. start with **logging** to find the slow phase
+2. use **Scalene** for line-level Python vs native insight
+3. use **cProfile** when you want exact call counts and call paths
+4. if the hotspot is in native code, use native profilers (`perf`, VTune)
+:::
+
+::: {.fragment}
+::: {.platypus-tip}
+Start broad and cheap. Go narrower only where the evidence points.
+:::
+:::
+
+## cProfile: when you want exact call counts
+
+```{.bash code-line-numbers="1|2|3"}
+python -m cProfile -s tottime my_script.py       # whole script
+python -m cProfile -s tottime -o prof.dat my_script.py  # save for pstats
+python -m cProfile -s cumtime my_script.py        # sort by cumulative
+```
+
+::: {.fragment}
+```text
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     1225    3.712    0.003    3.712    0.003 solver.py:42(build_graph)
+        1    1.204    1.204    1.204    1.204 solver.py:89(solve)
+     1225    0.847    0.001    0.847    0.001 solver.py:31(distance)
+```
+:::
+
+::: {.fragment}
+`build_graph` called **1225 times** — if you expected once, that is the bug.
+**Trust call counts from cProfile.** Treat timing as approximate; tracing adds overhead.
+:::
+
+## cProfile: targeted profiling
+
+```{.python code-line-numbers="1-3|5-9|10-11"}
+# Profile just one function call
+import cProfile
+cProfile.run("build_graph(data)", sort="tottime")
+
+# Profile a specific section with the context manager
+with cProfile.Profile() as pr:
+    result = build_graph(data)
+    solution = solve(result)
+
+pr.print_stats(sort="tottime")     # print to stdout
+pr.dump_stats("profile.dat")       # save for later analysis
+```
+
+::: {.fragment}
+```text
+         2374431 function calls (828274 primitive calls) in 0.757 seconds
+
+   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   206534    0.514    0.000    0.514    0.000 cp_model.py:537(add_all_different)
+1752679/206535    0.214    0.000    0.221    0.000 profile_solver.py:39(_extend)
+   206535    0.012    0.000    0.232    0.000 profile_solver.py:34(enumerate_all_cliques)
+        1    0.010    0.010    0.242    0.242 cp_model.py:333(new_int_var)
+```
+:::
+
+## Scalene: when you want line-level insight (wall-clock, Python/native split)
+
+```bash
+pip install scalene
+python -m scalene --html --program-path . --output profile.html my_script.py
+```
+
+::: {.incremental}
+- `--program-path .` — only profile **your** code, not libraries (crucial!)
+- `--html --output profile.html` — generate a browsable HTML report
+- without `--program-path`, the output is dominated by library internals
+:::
+
+## Reading Scalene output
+
+![](assets/scalene_example.png){width="95%"}
+
+::: {.fragment}
+For each file, Scalene shows per-line and per-function time.
+Here, `build_weighted_graph` takes **64%** — and line 30 alone takes **36%**.
+:::
+
+## C++ profiling with `perf`
+
+When the bottleneck is in compiled code, Python profilers can't help.
+`perf` reads the CPU's own hardware counters.
+
+<!-- Practical note for students: perf is Linux-only (install via linux-tools-common
+     or linux-perf). If you get "Permission denied", your kernel restricts hardware
+     counters for non-root users. Fix with:
+         sudo sysctl kernel.perf_event_paranoid=1
+     (or =0 for full access). Add to /etc/sysctl.conf to make persistent.
+     On university compute servers, ask the admin. -->
+
+## `perf stat` — classify the bottleneck
+
+```bash
+perf stat -e cycles,instructions,cache-references,cache-misses,\
+             branches,branch-misses ./my_program
+```
+
+::: {.fragment}
+```text
+ 106,492,298,140  cycles
+  19,885,322,792  instructions          #  0.19 IPC
+   1,169,144,985  cache-references
+     460,783,901  cache-misses          # 39.4%
+   3,898,830,400  branches
+     363,147,163  branch-misses         #  9.3%
+```
+:::
+
+::: {.fragment}
+Quick triage: **IPC < 1** and **high cache-miss rate** = memory-bound.
+:::
+
+## `perf record` — find *where* it hurts
+
+```bash
+perf record -g ./particle_sim      # writes perf.data in current directory
+perf report                        # reads perf.data → interactive TUI
+```
+
+::: {.fragment}
+```text
+  Overhead  Command       Shared Object     Symbol
+   99.83%  particle_sim  particle_sim      [.] compute_forces(...)
+    0.10%  particle_sim  ld-linux-x86-64   [.] ...
+    0.00%  particle_sim  particle_sim      [.] update_positions(...)
+```
+:::
+
+::: {.fragment}
+`compute_forces` is **99.8%** of runtime — `update_positions` doesn't even register.
+No point optimizing the integration loop.
+:::
+
+::: {.fragment}
+::: {.platypus-info}
+`perf stat` tells you *what kind* of bottleneck. `perf record` tells you *where*.
+:::
+:::
+
+## Inlining: where did my function go?
+
+::: {.incremental}
+- With `-O2`, the compiler **inlines** small functions — they disappear from `perf report`
+- The inlined code's samples get attributed to the **caller**
+- This is usually fine: you see where the CPU *actually* spends time
+- But if `dist()` is called from three places, you can't tell which call site is hot
+:::
+
+::: {.fragment}
+**To see inlined functions:**
+```bash
+perf record --call-graph dwarf ./my_program   # needs -g (debug info)
+perf report --no-children                      # flat view
+```
+Compile with **`-O2 -g`** — debug symbols without disabling optimizations.
+:::
+
+::: {.fragment}
+::: {.platypus-warning}
+`-O2 -g` is safe: debug info does not change generated code.
+Never profile with `-O0` — you'd measure the unoptimized version.
+:::
+:::
+

@@ -1,0 +1,94 @@
+# Wrap-up {background-image="assets/symbol_clockwork.png" background-opacity="0.3" background-size="cover" background-color="#2d4059"}
+
+The **discipline** matters more than the specific tools.
+
+## Same discipline, every time
+
+::: {.incremental}
+1. **Find the dominant cost** — logging, then profilers
+2. **Classify the bottleneck** — algorithmic? interpreter overhead? memory layout?
+3. **Change one thing** — the thing the evidence points to
+4. **Verify on the same workload** — timeit, Google Benchmark, or just timestamps
+:::
+
+::: {.fragment}
+::: {.platypus-tip}
+pybind11 is not "make it fast".
+Google Benchmark is not "time it nicely".
+Both are part of a measurement-driven workflow.
+:::
+:::
+
+## The compiled–interpreted trade-off
+
+:::: {.columns}
+::: {.column width="48%"}
+**Compiled (C++, Rust, ...)**
+
+- Close to the hardware — control over memory layout, SIMD, cache
+- Statically typed, optimized at compile time
+- Harder to maintain, deploy, and iterate on
+- Compilation + linking is a real cost (build times, platform compatibility)
+:::
+
+::: {.column width="4%"}
+:::
+
+::: {.column width="48%"}
+**Interpreted (Python, ...)**
+
+- Dynamic, explorable, interactive (REPL, notebooks)
+- Highly readable — by you, collaborators, and coding agents
+- Ideal for gluing high-performance libraries together
+- Slow for tight loops — by design, not by accident
+:::
+::::
+
+::: {.fragment}
+::: {.platypus-info}
+This is not a flaw in either language. It is a **fundamental trade-off**:
+code that is fully compiled and statically linked can be fast, but code that
+stays dynamic and interpretable can be flexible.
+:::
+:::
+
+## The concepts behind our tool choices
+
+| Tool | Concept | Alternatives |
+|---|---|---|
+| `logging` | Structured observability | `loguru`, `spdlog` (C++) |
+| Scalene | **Sampling** profiler (Python) | `py-spy`, VTune |
+| `perf` | **Sampling** profiler (C++) | VTune, `Instruments` (macOS) |
+| cProfile | **Tracing** profiler | `yappi`, `gprof` |
+| pybind11 | Native bindings for Python | `nanobind`, `cython`, `PyO3` |
+| `timeit` | Microbenchmarking (Python) | `pytest-benchmark` |
+| Google Benchmark | Microbenchmarking (C++) | `Catch2`, `criterion` (Rust) |
+
+## Further reading {.smaller}
+
+::: {.platypus-book}
+- **[Performance Analysis and Tuning on Modern CPUs](https://book.easyperf.net/perf_book)** — Denis Bakhvalov (CC0, free). Companion exercises: [perf-ninja](https://github.com/dendibakh/perf-ninja).
+- **[What Every Programmer Should Know About Memory](https://people.freebsd.org/~lstewart/articles/cpumemory.pdf)** — Ulrich Drepper (2007). The classic on memory hierarchy and caches.
+- **[Data Structures in Practice](https://github.com/data-structures-in-practice/data-structures-in-practice-public)** — Danny Jiang (CC BY 4.0). Hardware-aware data structures, backed by `perf` benchmarks.
+:::
+
+::: {.platypus-video}
+- **[Catching Cache: A Detective Story](https://www.youtube.com/watch?v=VhKq0nzPTh0)** — Michelle Nguyen (Bloomberg, ~42 min). Why `vector` beats `unordered_map` by 10×.
+- **[Matrix Multiplication Optimization](https://www.youtube.com/watch?v=GHctcSBd6Z4)** — Alexia Salah (Codeplay, ~46 min). 150× speedup: loop order → tiling → SIMD → cache-aware design.
+- **[Want fast C++? Know your hardware!](https://www.youtube.com/watch?v=BP6NxVxDQIs)** — Timur Doumler (CppCon 2016, ~60 min). Caches, branch prediction, false sharing, denormals.
+:::
+
+## Tool documentation
+
+| | |
+|---|---|
+| [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines) | Parameter passing, copy semantics, best practices |
+| [Google Benchmark](https://github.com/google/benchmark) | Microbenchmarking framework for C++ |
+| [pybind11 Documentation](https://pybind11.readthedocs.io) | C++/Python bindings — reference & tutorial |
+| [Course Material Repository](https://github.com/tubs-alg/algorithm-engineering-material-ss2026) | Slides, examples, and exercises |
+
+## {background-color="#2d4059"}
+
+::: {.r-fit-text}
+Questions?
+:::

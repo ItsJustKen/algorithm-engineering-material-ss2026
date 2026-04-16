@@ -1,0 +1,10 @@
+# Performance Engineering in Practice {background-image="assets/symbol_performance_engineering.png" background-opacity="0.3" background-size="cover" background-color="#2d4059"}
+
+We know **why** code gets slow.
+This tutorial is about **how to react**.
+
+::: {.fragment}
+**Block 1:** Find the bottleneck.
+**Block 2:** Fix the bottleneck.
+:::
+

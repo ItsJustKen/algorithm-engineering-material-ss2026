@@ -1,0 +1,283 @@
+# Block 2: Achieve Performance {background-image="assets/symbol_python_killers.png" background-opacity="0.3" background-size="cover" background-color="#2d4059"}
+
+Now we know **where** the time goes.
+Here's how to make it faster — in Python and in C++.
+
+<!-- Sources for Python Performance Killers:
+     - All code examples and benchmark numbers:
+       ../deep-research-report-python-performance-tricks.md
+     - Benchmark table (CPython 3.13.5, Linux x86_64): same report §"Benchmark table"
+     - set membership (1034x): report §"Prefer set/dict for membership checks"
+     - string concat (18x): report §"Avoid quadratic string concatenation"
+     - sum builtin (3.9x): report §"Prefer built-in reductions"
+     - lru_cache (50000x): report §"Use functools.lru_cache"
+     - NumPy (5000x): report §"Use NumPy for numeric hotspots"
+     - timeit list-vs-set output: re-measured on this machine (1211x)
+     - Summary chart: generated with matplotlib (gen_summary_charts.py)
+-->
+# Python Performance Killers {background-image="assets/symbol_python_killers2.png" background-opacity="0.3" background-size="cover" background-color="#2d4059"}
+
+Common patterns that are silently expensive.
+Each one is easy to fix — **once you know it's there**.
+
+## `x in list` is secretly O(n)
+
+:::: {.columns}
+::: {.column width="48%"}
+**Slow:**
+```python
+users = list(range(10_000))
+count = 0
+for q in queries:
+    if q in users:       # linear scan!
+        count += 1
+```
+:::
+
+::: {.column width="4%"}
+:::
+
+::: {.column width="48%"}
+**Fast:**
+```python
+users = set(range(10_000))
+count = 0
+for q in queries:
+    if q in users:       # hash lookup
+        count += 1
+```
+:::
+::::
+
+::: {.fragment}
+```text
+list: 128.6 ms   set: 0.12 ms   speedup: 1034x
+```
+:::
+
+::: {.fragment}
+::: {.platypus-tip}
+Building a **temporary data structure** just for faster lookups may feel redundant — but it is often the single most effective optimization.
+:::
+:::
+
+## Detour: `std::set` vs `std::vector` — not like Python {background-color="#2d4f4f"}
+
+In Python, `set` always beats `list` for lookups (1000x).
+In C++, the picture is **very different**.
+
+::: {.fragment}
+100k lookups against a container of size N:
+
+<table style="width:100%; table-layout:fixed;">
+    <colgroup>
+        <col style="width:11%;" />
+        <col style="width:29.67%;" />
+        <col style="width:29.67%;" />
+        <col style="width:29.67%;" />
+    </colgroup>
+    <thead>
+        <tr>
+            <th style="white-space:nowrap;">N</th>
+            <th>unsorted <code>vector</code> O(n)</th>
+            <th><code>std::set</code> O(log n)</th>
+            <th>sorted <code>vector</code> O(log n)</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr><td style="white-space:nowrap;">1K</td><td>1.5 ms</td><td>1.9 ms</td><td>1.7 ms</td></tr>
+        <tr><td style="white-space:nowrap;">10K</td><td><strong>126 ms</strong></td><td>4.2 ms</td><td><strong>2.4 ms</strong></td></tr>
+        <tr><td style="white-space:nowrap;">100K</td><td>1,258 ms</td><td>11.9 ms</td><td><strong>3.5 ms</strong></td></tr>
+        <tr><td style="white-space:nowrap;">1M</td><td>12,690 ms</td><td>29.2 ms</td><td><strong>4.9 ms</strong></td></tr>
+    </tbody>
+</table>
+:::
+
+::: {.fragment}
+At N=10K, `std::set` beats the linear scan by only **30x** — not 1000x like in Python.
+And the **sorted vector beats `std::set` by up to 6x** — same O(log n), fewer cache misses.
+:::
+
+::: {.fragment}
+::: {.platypus-tip}
+In C++, **data layout often matters more than algorithmic complexity class**.
+Prefer flat, contiguous containers unless insertions/deletions at scale make re-sorting too expensive.
+:::
+:::
+
+## String concatenation in loops
+
+:::: {.columns}
+::: {.column width="48%"}
+**Slow:**
+```python
+s = ""
+for part in parts:
+    s += part         # new string each time
+```
+:::
+
+::: {.column width="4%"}
+:::
+
+::: {.column width="48%"}
+**Fast:**
+```python
+s = "".join(parts)    # one allocation
+```
+:::
+::::
+
+::: {.fragment}
+```text
+s += part:     2.63 ms
+"".join():     0.14 ms     speedup: 18x
+```
+:::
+
+::: {.fragment}
+Strings are **immutable** in Python. Each `+=` copies the entire string so far.
+That is $O(n^2)$ in total length.
+:::
+
+## Use builtins instead of manual loops
+
+:::: {.columns}
+::: {.column width="48%"}
+**Slow:**
+```python
+total = 0
+for x in xs:
+    total += x
+```
+:::
+
+::: {.column width="4%"}
+:::
+
+::: {.column width="48%"}
+**Fast:**
+```python
+total = sum(xs)
+```
+:::
+::::
+
+::: {.fragment}
+```text
+manual loop: 7.21 ms     sum(): 1.87 ms     speedup: 3.9x
+```
+:::
+
+::: {.fragment}
+Also applies to `min()`, `max()`, `any()`, `all()` — all run in C, not Python bytecode.
+:::
+
+::: {.fragment}
+**The general principle:** push hot iterations into C-level code paths —
+the same idea as pybind11, just within the standard library.
+:::
+
+## Memoization with `@lru_cache`
+
+:::: {.columns}
+::: {.column width="48%"}
+**Slow:**
+```python
+def fib(n):
+    if n < 2: return n
+    return fib(n-1) + fib(n-2)
+```
+:::
+
+::: {.column width="4%"}
+:::
+
+::: {.column width="48%"}
+**Fast:**
+```python
+from functools import lru_cache
+
+@lru_cache(maxsize=None)
+def fib(n):
+    if n < 2: return n
+    return fib(n-1) + fib(n-2)
+```
+:::
+::::
+
+::: {.fragment}
+```text
+fib(32) naive:   390 ms
+fib(32) cached:  0.008 ms     speedup: 50,000x
+```
+:::
+
+::: {.fragment}
+Python's `@lru_cache` makes this a **one-line fix**.
+Any **pure** function with **repeated inputs** is a candidate — DP subproblems, normalization, parsing.
+:::
+
+## Push numeric work to NumPy
+
+:::: {.columns}
+::: {.column width="48%"}
+**Slow:**
+```python
+# Python nested loops
+for i in range(n):
+    for k in range(n):
+        for j in range(n):
+            C[i][j] += A[i][k] * B[k][j]
+```
+:::
+
+::: {.column width="4%"}
+:::
+
+::: {.column width="48%"}
+**Fast:**
+```python
+import numpy as np
+
+C = A @ B    # delegates to BLAS
+```
+:::
+::::
+
+::: {.fragment}
+```text
+Python loops (200x200): 436 ms
+NumPy A @ B (200x200):  0.087 ms     speedup: 5000x
+```
+:::
+
+::: {.fragment}
+If Scalene shows high **Python time** on numeric loops,
+NumPy (or moving to C++) is the answer — not micro-optimizing the loop.
+:::
+
+## Data containers: cost of abstraction
+
+Creating 100k objects with three `float` fields:
+
+| Container | Creation | Create + access | Relative |
+|-----------|---------|-----------------|----------|
+| `tuple` | 1.0 ms | 11 ms | **1x** |
+| `class` / `dataclass` | 15 ms | 23 ms | **~2x** |
+| `dataclass(slots=True)` | 14 ms | 22 ms | **~2x** |
+| `NamedTuple` | 18 ms | 27 ms | **~2.4x** |
+| Pydantic `BaseModel` | 51 ms | 59 ms | **~5x** |
+
+::: {.fragment}
+Pydantic validates and coerces **every field on every instantiation**.
+That is invaluable at system boundaries — and ruinous in a hot loop.
+:::
+
+::: {.fragment}
+::: {.platypus-tip}
+Use Pydantic for **parsing external input** (API, config, files).
+Use `dataclass(slots=True)` or plain tuples for **internal data** that gets created millions of times.
+:::
+:::
+

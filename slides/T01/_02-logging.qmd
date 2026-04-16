@@ -1,0 +1,127 @@
+<!-- Sources for Logging:
+     - Logging pattern: ../python-benchmarking.md §1-2
+     - Scenario inspired by ../examples/timestamp_profiling/ (coloring solver)
+     - Output generated with sleep() to simulate realistic timestamps
+-->
+# Observability: Basic Logging {background-image="assets/symbol_logging.png" background-opacity="0.3" background-size="cover" background-color="#2d4059"}
+
+Before profilers, try the simplest thing that could work.
+
+## Start with phase markers
+
+```python
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("solver")
+
+log.info("Loading instance: nodes=%d, edges=%d", n_nodes, n_edges)
+# ... loading code ...
+log.info("Computing greedy upper bound")
+# ... heuristic code ...
+log.info("Starting solver")
+# ... solver code ...
+log.info("Done")
+```
+
+::: {.fragment}
+The logger already adds timestamps.
+That is often enough to identify the slow phase.
+:::
+
+## What the timestamps reveal
+
+```text
+16:58:12 Loading instance: nodes=500, edges=12340
+16:58:12 Building graph
+16:58:12 Graph built: nodes=500, edges=12340, density=0.10
+16:58:12 Computing greedy upper bound
+16:58:16 Upper bound found: colors=12
+16:58:16 Starting solver
+16:58:18 Solver finished: colors=8, optimal=True
+16:58:18 Writing solution
+16:58:18 Done
+```
+
+::: {.fragment}
+**The "quick" heuristic is the bottleneck** — 4 seconds, while the actual solver took only 2.
+That is where we need to speed things up.
+:::
+
+## Add structural context
+
+```python
+log.info("Graph built: nodes=%d, edges=%d, density=%.2f",
+         n_nodes, n_edges, density)
+log.info("Cliques enumerated: count=%d, max_size=%d", n_cliques, max_size)
+log.info("Constraints generated: %d", n_constraints)
+```
+
+::: {.fragment}
+Without input-size context, runtime logs are much harder to interpret.
+:::
+
+::: {.fragment}
+**Log structural statistics at natural boundaries:**
+input size, graph size, iteration counts, constraint counts.
+:::
+
+## Controlling verbosity per component
+
+```python
+# Each module gets its own logger
+log_model = logging.getLogger("solver.model")
+log_heur  = logging.getLogger("solver.heuristic")
+
+# Use levels to express importance
+log_model.info("Variables: %d, constraints: %d", n_vars, n_cons)
+log_model.debug("Constraint matrix density: %.4f", density)
+log_heur.warning("Greedy coloring exceeded timeout")
+
+# Dial verbosity up or down per component
+log_model.setLevel(logging.DEBUG)     # loud — investigating model size
+log_heur.setLevel(logging.INFO)       # normal
+```
+
+::: {.fragment}
+**Leave log calls in the code permanently.**
+Dial verbosity up when investigating, down for production runs.
+:::
+
+## Guard expensive log computations
+
+```python
+# Bad: computes the histogram even when DEBUG is off
+log.debug("Degree histogram: %s", compute_degree_histogram(graph))
+
+# Good: skip the expensive call entirely
+if log.isEnabledFor(logging.DEBUG):
+    log.debug("Degree histogram: %s", compute_degree_histogram(graph))
+```
+
+::: {.fragment}
+`log.debug(...)` skips **formatting**, but Python still **evaluates all arguments** before the call.
+:::
+
+::: {.fragment}
+Guard with `isEnabledFor()` when an argument is expensive to compute.
+:::
+
+## Good code has logging — especially in production
+
+::: {.incremental}
+- phase markers let you **pinpoint issues** without reproducing them locally
+- add progress logs inside long loops (every **N** items, not every item)
+- use them to see **scaling behavior** and estimate remaining runtime
+:::
+
+::: {.fragment}
+**Logging tells you which phase is slow.**
+The structural stats often tell you **why at a high level**.
+Only then do you reach for finer-grained tools.
+:::
+
