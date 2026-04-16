@@ -3,6 +3,19 @@
 This exercise implements the 2-opt heuristic for the Traveling Salesman Problem
 using several move-selection strategies, in both Python and C++.
 
+## Updates
+
+Post-release fixes. Only changes that affect your workflow are listed here;
+see `git log` for the full history.
+
+- **2026-04-16** — Python variants (`first_improvement_two_opt`,
+  `full_scan_two_opt`, `best_improvement_two_opt`) now take an optional
+  `timeout: float = 10.0` parameter, matching the C++ API. If you already
+  started: add the parameter to your signature and check a deadline
+  (`time.perf_counter()`) in your outer loop — coarse-grained checks after
+  each restart or full sweep are enough. Without this, `benchmark.py` could
+  run for hours on large `n`. See issue #1.
+
 ## Project Structure
 
 ```
