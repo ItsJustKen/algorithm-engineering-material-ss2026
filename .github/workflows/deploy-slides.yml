@@ -24,7 +24,7 @@ jobs:
 
       - name: Render slides
         run: |
-          for qmd in slides/*/L*.qmd; do
+          for qmd in slides/*/[LT]*.qmd; do
             quarto render "$qmd"
           done
 
