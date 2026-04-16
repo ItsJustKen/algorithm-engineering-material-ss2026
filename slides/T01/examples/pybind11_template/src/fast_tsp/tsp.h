@@ -31,14 +31,14 @@ struct Point {
 };
 
 /**
- * Euclidean distance between cities i and j.
+ * Euclidean distance between two points.
  *
  * Inline because this is called O(N²) times per 2-opt pass —
  * function call overhead would be significant at that frequency.
  */
-inline double dist(std::span<const Point> cities, int i, int j) {
-    double dx = cities[i].x - cities[j].x;
-    double dy = cities[i].y - cities[j].y;
+inline double dist(const Point& a, const Point& b) {
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
     // Not using std::hypot: it handles overflow/underflow edge cases we
     // don't need, and is measurably slower in tight loops.
     return std::sqrt(dx * dx + dy * dy);

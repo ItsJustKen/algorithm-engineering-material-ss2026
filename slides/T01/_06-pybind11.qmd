@@ -104,9 +104,9 @@ struct Point {
     double y;
 };
 
-inline double dist(std::span<const Point> cities, int i, int j) {
-    double dx = cities[i].x - cities[j].x;
-    double dy = cities[i].y - cities[j].y;
+inline double dist(const Point& a, const Point& b) {
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
     return std::sqrt(dx * dx + dy * dy);
 }
 
@@ -118,10 +118,10 @@ std::vector<int> two_opt_improve(std::span<const Point> cities,
         improved = false;
         for (int i = 0; i < n - 1; i++) {
             for (int j = i + 2; j < n; j++) {
-                double old_d = dist(cities, tour[i], tour[i+1])
-                             + dist(cities, tour[j], tour[(j+1)%n]);
-                double new_d = dist(cities, tour[i], tour[j])
-                             + dist(cities, tour[i+1], tour[(j+1)%n]);
+                double old_d = dist(cities[tour[i]], cities[tour[i+1]])
+                             + dist(cities[tour[j]], cities[tour[(j+1)%n]]);
+                double new_d = dist(cities[tour[i]], cities[tour[j]])
+                             + dist(cities[tour[i+1]], cities[tour[(j+1)%n]]);
                 if (new_d < old_d - 1e-10) {
                     std::reverse(tour.begin()+i+1, tour.begin()+j+1);
                     improved = true;
@@ -139,30 +139,22 @@ Full code: `examples/pybind11_template/src/fast_tsp/tsp.h`
 
 ## Step 2: Write the binding file
 
-```{.cpp code-line-numbers="1-5|7-14|16-17|19-26|28-35|37-46|48-62"}
+```{.cpp code-line-numbers="1-5|7-8|10-18|20-28|30-40|42-56"}
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>       // auto-convert std::vector <-> Python list
 #include <array>
 #include "tsp.h"
 namespace py = pybind11;
 
-static std::vector<Point> make_points(
-    const std::vector<std::array<double, 2>>& cities) {
-    std::vector<Point> points;
-    points.reserve(cities.size());
-    for (const auto& city : cities)
-        points.push_back(Point{city[0], city[1]});
-    return points;
-}
-
 PYBIND11_MODULE(_native, m) {
     m.doc() = "fast_tsp C++ extension — TSP routines via pybind11";
 
     m.def("nearest_neighbor",
           [](const std::vector<std::array<double, 2>>& cities) {
-              auto points = make_points(cities);
+              std::vector<Point> pts; pts.reserve(cities.size());
+              for (auto& c : cities) pts.push_back({c[0], c[1]});
               py::gil_scoped_release release;    // let other Python threads run
-              return nearest_neighbor(points);   // std::vector<int> → list
+              return nearest_neighbor(pts);      // std::vector<int> → list
           },
           "Nearest neighbor heuristic",
           py::arg("cities"));
@@ -170,17 +162,19 @@ PYBIND11_MODULE(_native, m) {
     m.def("two_opt_improve",
           [](const std::vector<std::array<double, 2>>& cities,
              std::vector<int> tour) {
-              auto points = make_points(cities);
+              std::vector<Point> pts; pts.reserve(cities.size());
+              for (auto& c : cities) pts.push_back({c[0], c[1]});
               py::gil_scoped_release release;
-              return two_opt_improve(points, std::move(tour));
+              return two_opt_improve(pts, std::move(tour));
           },
           py::arg("cities"), py::arg("tour"));
 
     // Precomputed distance matrix for repeated access (e.g., multi-pass 2-opt)
     py::class_<DistanceMatrix>(m, "DistanceMatrix")
         .def(py::init([](const std::vector<std::array<double, 2>>& cities) {
-                 auto points = make_points(cities);
-                 return DistanceMatrix(points);
+                 std::vector<Point> pts; pts.reserve(cities.size());
+                 for (auto& c : cities) pts.push_back({c[0], c[1]});
+                 return DistanceMatrix(pts);
              }),
              py::arg("cities"))
         .def_property_readonly("size", &DistanceMatrix::size)

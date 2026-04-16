@@ -97,8 +97,41 @@ At N=1M: CSR is **1.7x faster** — memory layout matters.
 **Same semantics, different memory behavior** — exactly the kind of result microbenchmarks should explain.
 :::
 
+::: {.fragment}
+We have a plausible explanation — but **`perf stat`** can turn it into evidence.
+:::
+
 ::: {.source-note}
 Source: `examples/google_benchmark/` — you will get this template.
+:::
+
+## Benchmark + `perf stat`: Why Is CSR Faster?
+
+Filter to one case, wrap the binary with `perf stat`:
+
+```bash
+perf stat -r 3 -e cycles,instructions,cache-references,cache-misses \
+  ./bm_graph --benchmark_filter='BM_iterate_neighbors_adjlist/1000000$' \
+             --benchmark_min_time=2s
+# repeat with …_csr/1000000$
+```
+
+::: {.fragment}
+| Counter (per iteration)   |    adjlist |        CSR |       Ratio |
+|---------------------------|-----------:|-----------:|------------:|
+| time                      |   13.76 ms |    8.39 ms | 1.64× faster |
+| instructions / cycle      |       0.29 |       0.37 |       1.26× |
+| L1-dcache miss rate       |       8.1% |       5.6% |           — |
+| **cache-misses (≈ DRAM)** | **5.02 M** | **1.80 M** | **2.79× fewer** |
+:::
+
+::: {.fragment}
+**Benchmark tells you *how much*. `perf stat` tells you *why*.**
+Roughly 2.8× fewer DRAM-class misses — the pipeline is no longer starved.
+:::
+
+::: {.source-note}
+Use the generic `cache-references` / `cache-misses` events — `LLC-loads` / `LLC-load-misses` report `<not supported>` on AMD Zen.
 :::
 
 ## Setting Up Google Benchmark: Project Layout

@@ -178,8 +178,9 @@ Walkthrough example: `examples/perf_record/`
 
 ::: {.fragment}
 ::: {.platypus-tip}
-Classify first with `stat`, then localize with `record`.
-Starting with `record` means you're looking without knowing what for.
+Full program → `perf record` first to find the hotspot.
+Isolated benchmark → `perf stat` first to classify the bottleneck.
+But beware: an isolated benchmark may behave differently — warm caches, no memory pressure from surrounding code.
 :::
 :::
 
@@ -292,20 +293,4 @@ Press **`s`** → source interleaved. Inlined code too.
 ::::
 
 
-
-## The profiling loop
-
-```text
- perf stat       →   classify      (what kind?)
- perf record     →   localize      (where?)
- perf annotate   →   line / asm    (which instruction?)
- edit code       →   fix
- perf stat       →   verify        (same workload, compare)
-```
-
-::: {.fragment}
-::: {.platypus-info}
-A change that lowers IPC while adding instructions, or shifts work into the kernel, is not a win. Compare **wall time and counters together** against a baseline.
-:::
-:::
 

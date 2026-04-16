@@ -68,19 +68,11 @@ PYBIND11_MODULE(_native, m) {
 #include <array>
 #include <pybind11/stl.h>
 
-struct Point { double x, double y; };
-
-static std::vector<Point> make_points(const std::vector<std::array<double, 2>>& cities) {
-    std::vector<Point> points;
-    points.reserve(cities.size());
-    for (const auto& city : cities) {
-        points.push_back(Point{city[0], city[1]});
-    }
-    return points;
-}
+struct Point { double x, y; };
 
 m.def("process", [](const std::vector<std::array<double, 2>>& cities) {
-    auto points = make_points(cities);
+    std::vector<Point> points; points.reserve(cities.size());
+    for (auto& c : cities) points.push_back({c[0], c[1]});
     return my_cpp_function(points);      // pure C++, no pybind11 dependency
 }, py::arg("cities"));
 ```
@@ -136,7 +128,8 @@ struct DistanceMatrix {
 PYBIND11_MODULE(_native, m) {
     py::class_<DistanceMatrix>(m, "DistanceMatrix")
         .def(py::init([](const std::vector<std::array<double, 2>>& cities) {
-            auto points = make_points(cities);
+            std::vector<Point> points; points.reserve(cities.size());
+            for (auto& c : cities) points.push_back({c[0], c[1]});
             return DistanceMatrix(points);
         }), py::arg("cities"))
         // Methods

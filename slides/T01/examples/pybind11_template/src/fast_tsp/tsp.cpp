@@ -24,8 +24,8 @@ std::vector<int> two_opt_improve(std::span<const Point> cities, std::vector<int>
                 int a = tour[i], b = tour[i + 1];
                 int c = tour[j], d = tour[(j + 1) % n];
 
-                double old_d = dist(cities, a, b) + dist(cities, c, d);
-                double new_d = dist(cities, a, c) + dist(cities, b, d);
+                double old_d = dist(cities[a], cities[b]) + dist(cities[c], cities[d]);
+                double new_d = dist(cities[a], cities[c]) + dist(cities[b], cities[d]);
 
                 // 1e-10 tolerance avoids infinite loops from floating-point noise.
                 if (new_d < old_d - 1e-10) {
@@ -52,7 +52,7 @@ std::vector<int> nearest_neighbor(std::span<const Point> cities) {
         double best_d = std::numeric_limits<double>::infinity();
         for (int j = 0; j < n; j++) {
             if (!visited[j]) {
-                double d = dist(cities, current, j);
+                double d = dist(cities[current], cities[j]);
                 if (d < best_d) {
                     best_d = d;
                     best = j;
@@ -69,7 +69,7 @@ double tour_length(std::span<const Point> cities, const std::vector<int>& tour) 
     int n = static_cast<int>(tour.size());
     double total = 0.0;
     for (int i = 0; i < n; i++) {
-        total += dist(cities, tour[i], tour[(i + 1) % n]);
+        total += dist(cities[tour[i]], cities[tour[(i + 1) % n]]);
     }
     return total;
 }
@@ -83,7 +83,7 @@ DistanceMatrix::DistanceMatrix(std::span<const Point> cities)
     for (int i = 0; i < n_; i++) {
         data_[i * n_ + i] = 0.0;
         for (int j = i + 1; j < n_; j++) {
-            double d = dist(cities, i, j);
+            double d = dist(cities[i], cities[j]);
             data_[i * n_ + j] = d;
             data_[j * n_ + i] = d;
         }

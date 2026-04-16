@@ -88,8 +88,10 @@ log_heur.setLevel(logging.INFO)       # normal
 ```
 
 ::: {.fragment}
+::: {.platypus-tip}
 **Leave log calls in the code permanently.**
 Dial verbosity up when investigating, down for production runs.
+:::
 :::
 
 ## Guard expensive log computations
@@ -120,8 +122,10 @@ Guard with `isEnabledFor()` when an argument is expensive to compute.
 :::
 
 ::: {.fragment}
+::: {.platypus-info}
 **Logging tells you which phase is slow.**
 The structural stats often tell you **why at a high level**.
 Only then do you reach for finer-grained tools.
+:::
 :::
 
