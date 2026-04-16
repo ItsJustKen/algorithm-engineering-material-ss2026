@@ -64,12 +64,6 @@ stays dynamic and interpretable can be flexible.
 | `timeit` | Microbenchmarking (Python) | `pytest-benchmark` |
 | Google Benchmark | Microbenchmarking (C++) | `Catch2`, `criterion` (Rust) |
 
-## {background-color="#2d4059"}
-
-::: {.r-fit-text}
-Questions?
-:::
-
 ## Further reading {.smaller}
 
 ::: {.platypus-book}
