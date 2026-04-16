@@ -148,17 +148,8 @@ Here, `build_weighted_graph` takes **64%** — and line 30 alone takes **36%**.
 
 ## C++ profiling with `perf`
 
-Profiling C++ is more painful than Python — but the payoff is a view all the way down to the hardware.
-
-::: {.incremental}
-- `perf` reads the CPU's own counters: cycles, cache misses, branch mispredictions
-- You see not just **where** the CPU spent time, but **why** it spent it there
-- No code changes, no recompile beyond `-g` for symbols
-:::
-
-::: {.source-note}
-Walkthrough example: `examples/perf_record/`
-:::
+When the bottleneck is in compiled code, Python profilers can't help.
+`perf` reads the CPU's own hardware counters.
 
 <!-- Practical note for students: perf is Linux-only (install via linux-tools-common
      or linux-perf). If you get "Permission denied", your kernel restricts hardware
@@ -167,27 +158,11 @@ Walkthrough example: `examples/perf_record/`
      (or =0 for full access). Add to /etc/sysctl.conf to make persistent.
      On university compute servers, ask the admin. -->
 
-## `perf` answers two questions
-
-::: {.incremental}
-- **What kind of bottleneck is this?** — compute, memory, branches, kernel, waiting
-  - **count** events across the run → `perf stat`
-- **Where in the code does it land?** — function, line, call path
-  - **sample** the program counter → `perf record`
-:::
-
-::: {.fragment}
-::: {.platypus-tip}
-Classify first with `stat`, then localize with `record`.
-Starting with `record` means you're looking without knowing what for.
-:::
-:::
-
-## `perf stat` — classify
+## `perf stat` — classify the bottleneck
 
 ```bash
-perf stat -r 5 -e cycles,instructions,cache-references,cache-misses,\
-                  branches,branch-misses ./my_program
+perf stat -e cycles,instructions,cache-references,cache-misses,\
+             branches,branch-misses ./my_program
 ```
 
 ::: {.fragment}
@@ -201,111 +176,59 @@ perf stat -r 5 -e cycles,instructions,cache-references,cache-misses,\
 ```
 :::
 
-::: {.incremental}
-- **IPC** (instructions per cycle) is the first-order signal — 0.19 means the CPU is mostly stalled
-- Read IPC **together with** total instructions and wall time — not alone
-- Vectorizing can *raise* CPI while making code faster (fewer instructions, same work)
-- `-r 5` repeats the run and reports variance — use it for any measurement you'll act on
+::: {.fragment}
+Quick triage: **IPC < 1** and **high cache-miss rate** = memory-bound.
 :::
 
-## Read the signature, not the number
+## `perf record` — find *where* it hurts
+
+```bash
+perf record -g ./particle_sim      # writes perf.data in current directory
+perf report                        # reads perf.data → interactive TUI
+```
 
 ::: {.fragment}
-Individual counters rarely diagnose. **Patterns across counters** do.
+```text
+  Overhead  Command       Shared Object     Symbol
+   99.83%  particle_sim  particle_sim      [.] compute_forces(...)
+    0.10%  particle_sim  ld-linux-x86-64   [.] ...
+    0.00%  particle_sim  particle_sim      [.] update_positions(...)
+```
+:::
 
-| Pattern | Counter signature | Likely cause |
-|---|---|---|
-| Compute-bound | High IPC, low miss rate | Instruction count / algorithm |
-| Memory-bound | Low IPC, miss pressure high | Locality, data layout |
-| Branch-heavy | Branch-miss % high on *hot* code | Unpredictable conditionals |
-| Kernel-heavy | `cycles:k` comparable to `cycles:u` | Syscalls, I/O path |
-| **Off-CPU** | `task-clock` ≪ wall time | Waiting, not computing |
+::: {.fragment}
+`compute_forces` is **99.8%** of runtime — `update_positions` doesn't even register.
+No point optimizing the integration loop.
+:::
+
+::: {.fragment}
+::: {.platypus-info}
+`perf stat` tells you *what kind* of bottleneck. `perf record` tells you *where*.
+:::
+:::
+
+## Inlining: where did my function go?
+
+::: {.incremental}
+- With `-O2`, the compiler **inlines** small functions — they disappear from `perf report`
+- The inlined code's samples get attributed to the **caller**
+- This is usually fine: you see where the CPU *actually* spends time
+- But if `dist()` is called from three places, you can't tell which call site is hot
+:::
+
+::: {.fragment}
+**To see inlined functions:**
+```bash
+perf record --call-graph dwarf ./my_program   # needs -g (debug info)
+perf report --no-children                      # flat view
+```
+Compile with **`-O2 -g`** — debug symbols without disabling optimizations.
 :::
 
 ::: {.fragment}
 ::: {.platypus-warning}
-Last row is the trap: if `task-clock` ≪ wall time, your program is **blocked, not slow**. You need off-CPU tools (`perf record --off-cpu`, `perf sched`, `perf lock`) — sampling harder won't help.
-:::
-:::
-
-## `perf record` + `perf report`: find the hotspot
-
-```bash
-g++ -O2 -g -std=c++17 -o particle_sim main.cpp   # -g: debug info, no codegen change
-perf record -F 99 --call-graph dwarf ./particle_sim
-perf report                                       # interactive TUI
-```
-
-:::: {.columns}
-
-::: {.column width="65%"}
-::: {.r-stack}
-![](assets/perf_report_overview.png){.fragment .fade-out fragment-index=1 width="100%"}
-
-![](assets/perf_report_selected.png){.fragment .fade-in-then-out fragment-index=1 width="100%"}
-
-![](assets/perf_report_menu.png){.fragment .fade-in-then-out fragment-index=2 width="100%"}
-
-![](assets/perf_annotate_asm.png){.fragment .fade-in-then-out fragment-index=3 width="100%"}
-
-![](assets/perf_annotate_source.png){.fragment .fade-in fragment-index=4 width="100%"}
-:::
-:::
-
-::: {.column width="35%"}
-
-<!-- adding some space here to push the box a little down -->
-&#160;
-
-::: {.fragment fragment-index=5}
-::: {.platypus-tip}
-`-O2 -g`: debug info maps samples to source lines.
-Never use `-O0`.
-:::
-:::
-
-
-:::
-
-::: {.r-stack}
-::: {.fragment .fade-out fragment-index=1}
-`compute_forces` at **100%** Children — every sample goes through it.
-:::
-
-::: {.fragment .fade-in-then-out fragment-index=1}
-Arrow keys → highlight the hot symbol.
-:::
-
-::: {.fragment .fade-in-then-out fragment-index=2}
-**Enter** → action menu → **Annotate**.
-:::
-
-::: {.fragment .fade-in-then-out fragment-index=3}
-Default: asm-only, sample % per instruction.
-:::
-
-::: {.fragment .fade-in fragment-index=4}
-Press **`s`** → source interleaved. Inlined code too.
-:::
-:::
-
-::::
-
-
-
-## The profiling loop
-
-```text
- perf stat       →   classify      (what kind?)
- perf record     →   localize      (where?)
- perf annotate   →   line / asm    (which instruction?)
- edit code       →   fix
- perf stat       →   verify        (same workload, compare)
-```
-
-::: {.fragment}
-::: {.platypus-info}
-A change that lowers IPC while adding instructions, or shifts work into the kernel, is not a win. Compare **wall time and counters together** against a baseline.
+`-O2 -g` is safe: debug info does not change generated code.
+Never profile with `-O0` — you'd measure the unoptimized version.
 :::
 :::
 

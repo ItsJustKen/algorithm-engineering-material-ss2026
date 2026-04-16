@@ -1,5 +1,5 @@
 <!-- Sources for pybind11:
-     - Template code: ../examples/pybind11_template/
+     - Template code: examples/pybind11_template/
      - Benchmark output (~190x/~260x): measured on this machine running
        examples/pybind11_template/benchmark_python_vs_cpp.py
      - pybind11 v3 API, scikit-build-core, binding patterns:
@@ -139,20 +139,28 @@ Full code: `examples/pybind11_template/src/fast_tsp/tsp.h`
 
 ## Step 2: Write the binding file
 
-```{.cpp code-line-numbers="1-5|7-8|10-19|21-30|32-41|43-57"}
+```{.cpp code-line-numbers="1-5|7-14|16-17|19-26|28-35|37-46|48-62"}
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>       // auto-convert std::vector <-> Python list
 #include <array>
 #include "tsp.h"
 namespace py = pybind11;
 
+static std::vector<Point> make_points(
+    const std::vector<std::array<double, 2>>& cities) {
+    std::vector<Point> points;
+    points.reserve(cities.size());
+    for (const auto& city : cities)
+        points.push_back(Point{city[0], city[1]});
+    return points;
+}
+
 PYBIND11_MODULE(_native, m) {
     m.doc() = "fast_tsp C++ extension — TSP routines via pybind11";
 
     m.def("nearest_neighbor",
           [](const std::vector<std::array<double, 2>>& cities) {
-              std::vector<Point> points; points.reserve(cities.size());
-              for (auto& c : cities) points.push_back({c[0], c[1]});
+              auto points = make_points(cities);
               py::gil_scoped_release release;    // let other Python threads run
               return nearest_neighbor(points);   // std::vector<int> → list
           },
@@ -162,8 +170,7 @@ PYBIND11_MODULE(_native, m) {
     m.def("two_opt_improve",
           [](const std::vector<std::array<double, 2>>& cities,
              std::vector<int> tour) {
-              std::vector<Point> points; points.reserve(cities.size());
-              for (auto& c : cities) points.push_back({c[0], c[1]});
+              auto points = make_points(cities);
               py::gil_scoped_release release;
               return two_opt_improve(points, std::move(tour));
           },
@@ -172,8 +179,7 @@ PYBIND11_MODULE(_native, m) {
     // Precomputed distance matrix for repeated access (e.g., multi-pass 2-opt)
     py::class_<DistanceMatrix>(m, "DistanceMatrix")
         .def(py::init([](const std::vector<std::array<double, 2>>& cities) {
-                 std::vector<Point> points; points.reserve(cities.size());
-                 for (auto& c : cities) points.push_back({c[0], c[1]});
+                 auto points = make_points(cities);
                  return DistanceMatrix(points);
              }),
              py::arg("cities"))

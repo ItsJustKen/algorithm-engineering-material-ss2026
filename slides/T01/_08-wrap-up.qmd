@@ -19,6 +19,57 @@ Both are part of a measurement-driven workflow.
 :::
 :::
 
+## The compiled–interpreted trade-off
+
+:::: {.columns}
+::: {.column width="48%"}
+**Compiled (C++, Rust, ...)**
+
+- Close to the hardware — control over memory layout, SIMD, cache
+- Statically typed, optimized at compile time
+- Harder to maintain, deploy, and iterate on
+- Compilation + linking is a real cost (build times, platform compatibility)
+:::
+
+::: {.column width="4%"}
+:::
+
+::: {.column width="48%"}
+**Interpreted (Python, ...)**
+
+- Dynamic, explorable, interactive (REPL, notebooks)
+- Highly readable — by you, collaborators, and coding agents
+- Ideal for gluing high-performance libraries together
+- Slow for tight loops — by design, not by accident
+:::
+::::
+
+::: {.fragment}
+::: {.platypus-info}
+This is not a flaw in either language. It is a **fundamental trade-off**:
+code that is fully compiled and statically linked can be fast, but code that
+stays dynamic and interpretable can be flexible.
+:::
+:::
+
+## The concepts behind our tool choices
+
+| Tool | Concept | Alternatives |
+|---|---|---|
+| `logging` | Structured observability | `loguru`, `spdlog` (C++) |
+| Scalene | **Sampling** profiler (Python) | `py-spy`, VTune |
+| `perf` | **Sampling** profiler (C++) | VTune, `Instruments` (macOS) |
+| cProfile | **Tracing** profiler | `yappi`, `gprof` |
+| pybind11 | Native bindings for Python | `nanobind`, `cython`, `PyO3` |
+| `timeit` | Microbenchmarking (Python) | `pytest-benchmark` |
+| Google Benchmark | Microbenchmarking (C++) | `Catch2`, `criterion` (Rust) |
+
+## {background-color="#2d4059"}
+
+::: {.r-fit-text}
+Questions?
+:::
+
 ## Further reading {.smaller}
 
 ::: {.platypus-book}
@@ -41,17 +92,3 @@ Both are part of a measurement-driven workflow.
 | [Google Benchmark](https://github.com/google/benchmark) | Microbenchmarking framework for C++ |
 | [pybind11 Documentation](https://pybind11.readthedocs.io) | C++/Python bindings — reference & tutorial |
 | [Course Material Repository](https://github.com/tubs-alg/algorithm-engineering-material-ss2026) | Slides, examples, and exercises |
-
-## Concepts, not tools {.smaller}
-
-| Tool | Concept | Alternatives |
-|---|---|---|
-| `logging` | Structured observability | `loguru`, `spdlog` (C++) |
-| Scalene | **Sampling** profiler (Python) | `py-spy`, VTune |
-| `perf` | **Sampling** profiler (C++) | VTune, `Instruments` (macOS) |
-| cProfile | **Tracing** profiler | `yappi`, `gprof` |
-| pybind11 | Native bindings for Python | `nanobind`, `cython`, `PyO3` |
-| `timeit` | Microbenchmarking (Python) | `pytest-benchmark` |
-| Google Benchmark | Microbenchmarking (C++) | `Catch2`, `criterion` (Rust) |
-
-

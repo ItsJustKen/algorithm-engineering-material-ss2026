@@ -27,6 +27,15 @@ namespace py = pybind11;
 // `pip install -e .` means the C++ wasn't recompiled.
 #define FAST_TSP_VERSION "0.1.0"
 
+static std::vector<Point> make_points(const std::vector<std::array<double, 2>>& cities) {
+    std::vector<Point> points;
+    points.reserve(cities.size());
+    for (const auto& city : cities) {
+        points.push_back(Point{city[0], city[1]});
+    }
+    return points;
+}
+
 // Module name "_native" matches the import in __init__.py:
 //   from fast_tsp._native import nearest_neighbor, ...
 // The leading underscore signals "private implementation detail".
@@ -37,9 +46,9 @@ PYBIND11_MODULE(_native, m) {
     m.attr("__version__") = FAST_TSP_VERSION;
 
     // ---- Free functions (compute distances on the fly) ----
-    // Each wrapper copies Python coordinate pairs into std::vector<Point>
-    // once, then delegates to the pure C++ function. For the O(N²) algorithms
-    // here, this O(N) copy is negligible compared with the saved interpreter overhead.
+    // Each wrapper converts Python coordinate pairs once, then delegates to
+    // the pure C++ function. For the O(N²) algorithms here, this O(N) copy
+    // is negligible compared with the saved interpreter overhead.
 
     // GIL is released before long-running pure C++ computations so that
     // other Python threads are not blocked. This is safe because the lambdas
@@ -48,8 +57,7 @@ PYBIND11_MODULE(_native, m) {
 
     m.def("two_opt_improve",
           [](const std::vector<std::array<double, 2>>& cities, std::vector<int> tour) {
-              std::vector<Point> points; points.reserve(cities.size());
-              for (auto& c : cities) points.push_back({c[0], c[1]});
+              auto points = make_points(cities);
               py::gil_scoped_release release;
               return two_opt_improve(points, std::move(tour));
           },
@@ -58,8 +66,7 @@ PYBIND11_MODULE(_native, m) {
 
     m.def("nearest_neighbor",
           [](const std::vector<std::array<double, 2>>& cities) {
-              std::vector<Point> points; points.reserve(cities.size());
-              for (auto& c : cities) points.push_back({c[0], c[1]});
+              auto points = make_points(cities);
               py::gil_scoped_release release;
               return nearest_neighbor(points);
           },
@@ -68,8 +75,7 @@ PYBIND11_MODULE(_native, m) {
 
     m.def("tour_length",
           [](const std::vector<std::array<double, 2>>& cities, const std::vector<int>& tour) {
-              std::vector<Point> points; points.reserve(cities.size());
-              for (auto& c : cities) points.push_back({c[0], c[1]});
+              auto points = make_points(cities);
               return tour_length(points, tour);
           },
           "Compute total tour length",
@@ -82,8 +88,7 @@ PYBIND11_MODULE(_native, m) {
 
     py::class_<DistanceMatrix>(m, "DistanceMatrix")
         .def(py::init([](const std::vector<std::array<double, 2>>& cities) {
-                 std::vector<Point> points; points.reserve(cities.size());
-                 for (auto& c : cities) points.push_back({c[0], c[1]});
+                 auto points = make_points(cities);
                  return DistanceMatrix(points);
              }),
              "Build N×N distance matrix from a sequence of coordinate pairs",

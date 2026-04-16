@@ -36,5 +36,3 @@ bibliography: references.bib
 {{< include _07-cpp-killers.qmd >}}
 
 {{< include _08-wrap-up.qmd >}}
-
-## References
