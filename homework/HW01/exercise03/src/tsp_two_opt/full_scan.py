@@ -1,4 +1,5 @@
 import math
+import time
 
 
 def _dist(points, a, b):
@@ -12,20 +13,39 @@ def full_scan_two_opt(
     initial_tour: list[int],
     timeout: float = 10.0,
 ) -> list[int]:
-    """
-    Full-scan 2-opt: apply improvements immediately, continue scanning.
 
-    Args:
-        points: List of (x, y) coordinate tuples.
-        initial_tour: Starting tour as a permutation of point indices.
-        timeout: Maximum runtime in seconds. If exceeded, return the best tour
-            found so far. Check ``time.perf_counter()`` against a precomputed
-            deadline after each full sweep (coarse-grained is fine).
+    tour = initial_tour.copy()
+    n = len(tour)
 
-    Returns:
-        Tour as a list of point indices.
-    """
-    # TODO: Implement Variant 2 (full-scan, continue after improvement).
-    # Respect ``timeout``: compute ``deadline = time.perf_counter() + timeout``
-    # and break out of the outer loop once the deadline is reached.
-    raise NotImplementedError
+    deadline = time.perf_counter() + timeout
+
+    while True:
+        improved = False
+
+        for i in range(n - 1):
+            for j in range(i + 2, n):
+
+                # skip adjacent edges in cycle
+                if i == 0 and j == n - 1:
+                    continue
+
+                if time.perf_counter() > deadline:
+                    return tour
+
+                a, b = tour[i], tour[i + 1]
+                c, d = tour[j], tour[(j + 1) % n]
+
+                current = _dist(points, a, b) + _dist(points, c, d)
+                new = _dist(points, a, c) + _dist(points, b, d)
+
+                delta = new - current
+
+                if delta < 0:
+                    tour[i + 1:j + 1] = reversed(tour[i + 1:j + 1])
+                    improved = True
+                    # ❗ önemli fark: break YOK → taramaya devam
+
+        if not improved:
+            break
+
+    return tour

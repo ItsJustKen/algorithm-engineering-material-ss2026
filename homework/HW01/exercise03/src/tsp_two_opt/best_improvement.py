@@ -1,4 +1,5 @@
 import math
+import time
 
 
 def _dist(points, a, b):
@@ -12,20 +13,48 @@ def best_improvement_two_opt(
     initial_tour: list[int],
     timeout: float = 10.0,
 ) -> list[int]:
-    """
-    Best-improvement 2-opt: scan all pairs, apply only the best move per pass.
 
-    Args:
-        points: List of (x, y) coordinate tuples.
-        initial_tour: Starting tour as a permutation of point indices.
-        timeout: Maximum runtime in seconds. If exceeded, return the best tour
-            found so far. Check ``time.perf_counter()`` against a precomputed
-            deadline after each full sweep (coarse-grained is fine).
+    tour = initial_tour.copy()
+    n = len(tour)
 
-    Returns:
-        Tour as a list of point indices.
-    """
-    # TODO: Implement Variant 3 (best-improvement).
-    # Respect ``timeout``: compute ``deadline = time.perf_counter() + timeout``
-    # and break out of the outer loop once the deadline is reached.
-    raise NotImplementedError
+    deadline = time.perf_counter() + timeout
+
+    while True:
+        best_delta = 0
+        best_i = -1
+        best_j = -1
+
+        for i in range(n - 1):
+            for j in range(i + 2, n):
+
+                # cyclic adjacency skip
+                if i == 0 and j == n - 1:
+                    continue
+
+                if time.perf_counter() > deadline:
+                    return tour
+
+                a, b = tour[i], tour[i + 1]
+                c, d = tour[j], tour[(j + 1) % n]
+
+                current = _dist(points, a, b) + _dist(points, c, d)
+                new = _dist(points, a, c) + _dist(points, b, d)
+
+                delta = new - current
+
+                if delta < best_delta:
+                    best_delta = delta
+                    best_i = i
+                    best_j = j
+
+        # no improvement found
+        if best_i == -1:
+            break
+
+        # apply best move
+        tour[best_i + 1:best_j + 1] = reversed(tour[best_i + 1:best_j + 1])
+
+        if time.perf_counter() > deadline:
+            break
+
+    return tour
