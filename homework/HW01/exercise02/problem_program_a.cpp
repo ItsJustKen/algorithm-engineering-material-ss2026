@@ -68,12 +68,9 @@ double problematic_function(const std::vector<std::size_t>& a,
             std::int64_t a_i = a[ax];
             std::int64_t b_j = b[j];
             auto t1 = turn({x, y}, {a_i, b_j}, {b_j, a_i});
-            if(t1 >= 0) {
-                auto t2 = turn({x, y}, {-b_j, -a_i}, {-a_i, -b_j});
-                if(t2 >= 0) {
-                    result += c[(a_i + b_j) % m] * (t1 + t2 + 1);
-                }
-            }
+            auto t2 = turn({x, y}, {-b_j, -a_i}, {-a_i, -b_j});
+            bool mask = (t1 >= 0) && (t2 >= 0);
+            result += mask * (c[(a_i + b_j) % m] * (t1 + t2 + 1));
         }
     }
     return result;
@@ -81,7 +78,7 @@ double problematic_function(const std::vector<std::size_t>& a,
 
 
 int main(int argc, char** argv) {
-    std::size_t n = 1024;
+    std::size_t n = 32768;
     if(argc == 2) {
         n = static_cast<std::size_t>(std::stoull(argv[1]));
     }
