@@ -56,8 +56,7 @@ static std::vector<int> make_random_tour(int n, int seed) {
 // 1. FIRST IMPROVEMENT
 // =======================================================
 static std::vector<int> two_opt_first_improvement(
-    const std::vector<Point> &points,
-    std::vector<int> tour,
+    const std::vector<Point> &points, std::vector<int> tour,
     double timeout_seconds) {
 
   int n = tour.size();
@@ -71,20 +70,21 @@ static std::vector<int> two_opt_first_improvement(
 
         if (i == 0 && j == n - 1) continue;
 
-        auto a = tour[i];
-        auto b = tour[i + 1];
-        auto c = tour[j];
-        auto d = tour[(j + 1) % n];
+        double delta =
+            dist(points, tour[i], tour[j]) +
+            dist(points, tour[i + 1], tour[(j + 1) % n]) -
+            dist(points, tour[i], tour[i + 1]) -
+            dist(points, tour[j], tour[(j + 1) % n]);
 
-        double cur = dist(points, a, b) + dist(points, c, d);
-        double nxt = dist(points, a, c) + dist(points, b, d);
-
-        if (nxt < cur) {
+        if (delta < 0) {
           std::reverse(tour.begin() + i + 1, tour.begin() + j + 1);
           improved = true;
           break;
         }
+
+        if (Clock::now() >= deadline) return tour;
       }
+
       if (improved) break;
     }
 
@@ -99,8 +99,7 @@ static std::vector<int> two_opt_first_improvement(
 // 2. FULL SCAN
 // =======================================================
 static std::vector<int> two_opt_full_scan(
-    const std::vector<Point> &points,
-    std::vector<int> tour,
+    const std::vector<Point> &points, std::vector<int> tour,
     double timeout_seconds) {
 
   int n = tour.size();
@@ -114,23 +113,23 @@ static std::vector<int> two_opt_full_scan(
 
         if (i == 0 && j == n - 1) continue;
 
-        auto a = tour[i];
-        auto b = tour[i + 1];
-        auto c = tour[j];
-        auto d = tour[(j + 1) % n];
+        double delta =
+            dist(points, tour[i], tour[j]) +
+            dist(points, tour[i + 1], tour[(j + 1) % n]) -
+            dist(points, tour[i], tour[i + 1]) -
+            dist(points, tour[j], tour[(j + 1) % n]);
 
-        double cur = dist(points, a, b) + dist(points, c, d);
-        double nxt = dist(points, a, c) + dist(points, b, d);
-
-        if (nxt < cur) {
+        if (delta < 0) {
           std::reverse(tour.begin() + i + 1, tour.begin() + j + 1);
           improved = true;
         }
+
+        if (Clock::now() >= deadline) return tour;
       }
     }
 
-    if (Clock::now() >= deadline) return tour;
     if (!improved) break;
+    if (Clock::now() >= deadline) return tour;
   }
 
   return tour;
@@ -140,15 +139,14 @@ static std::vector<int> two_opt_full_scan(
 // 3. BEST IMPROVEMENT
 // =======================================================
 static std::vector<int> two_opt_best_improvement(
-    const std::vector<Point> &points,
-    std::vector<int> tour,
+    const std::vector<Point> &points, std::vector<int> tour,
     double timeout_seconds) {
 
   int n = tour.size();
   auto deadline = Clock::now() + std::chrono::duration<double>(timeout_seconds);
 
   while (true) {
-    double best_delta = 0;
+    double best_delta = 0.0;
     int best_i = -1, best_j = -1;
 
     for (int i = 0; i < n - 1; ++i) {
@@ -156,29 +154,27 @@ static std::vector<int> two_opt_best_improvement(
 
         if (i == 0 && j == n - 1) continue;
 
-        auto a = tour[i];
-        auto b = tour[i + 1];
-        auto c = tour[j];
-        auto d = tour[(j + 1) % n];
-
-        double cur = dist(points, a, b) + dist(points, c, d);
-        double nxt = dist(points, a, c) + dist(points, b, d);
-
-        double delta = nxt - cur;
+        double delta =
+            dist(points, tour[i], tour[j]) +
+            dist(points, tour[i + 1], tour[(j + 1) % n]) -
+            dist(points, tour[i], tour[i + 1]) -
+            dist(points, tour[j], tour[(j + 1) % n]);
 
         if (delta < best_delta) {
           best_delta = delta;
           best_i = i;
           best_j = j;
         }
+
+        if (Clock::now() >= deadline) return tour;
       }
     }
 
-    if (Clock::now() >= deadline) return tour;
-    if (best_i == -1) break;
+    if (best_i < 0) break;
 
-    std::reverse(tour.begin() + best_i + 1,
-                  tour.begin() + best_j + 1);
+    std::reverse(tour.begin() + best_i + 1, tour.begin() + best_j + 1);
+
+    if (Clock::now() >= deadline) return tour;
   }
 
   return tour;
@@ -192,35 +188,27 @@ std::vector<int> parallel_two_opt(const std::vector<Point> &points,
                                   int base_seed,
                                   double timeout_seconds) {
 
-  std::vector<std::vector<int>> results(num_threads);
   std::vector<std::thread> threads;
-
-  auto deadline = Clock::now() + std::chrono::duration<double>(timeout_seconds);
+  std::vector<std::vector<int>> results(num_threads);
+  std::vector<double> lengths(num_threads);
 
   for (int t = 0; t < num_threads; ++t) {
     threads.emplace_back([&, t]() {
-
       auto tour = make_random_tour(points.size(), base_seed + t);
-      results[t] = two_opt_full_scan(points, tour, timeout_seconds);
+      tour = two_opt_full_scan(points, tour, timeout_seconds);
+      results[t] = tour;
+      lengths[t] = tour_length(points, tour);
     });
   }
 
-  for (auto &th : threads) {
-    th.join();
-  }
+  for (auto &th : threads) th.join();
 
-  int best_idx = 0;
-  double best_len = tour_length(points, results[0]);
-
+  int best = 0;
   for (int i = 1; i < num_threads; ++i) {
-    double len = tour_length(points, results[i]);
-    if (len < best_len) {
-      best_len = len;
-      best_idx = i;
-    }
+    if (lengths[i] < lengths[best]) best = i;
   }
 
-  return results[best_idx];
+  return results[best];
 }
 
 // =======================================================

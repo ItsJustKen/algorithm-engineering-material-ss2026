@@ -1,0 +1,13 @@
+1) In Python unterscheiden sich die drei 2-opt-Varianten vor allem in Laufzeit und Suchverhalten:
+	•	Full-scan: am schnellsten, da Verbesserungen sofort übernommen werden und kein Restart erfolgt.
+	•	First-improvement: mittlere Laufzeit, da nach jeder Verbesserung neu gescannt wird.
+	•	Best-improvement: am langsamsten, da alle Paare geprüft werden, um die beste Verbesserung zu finden.
+
+Lösungsgüte: Alle Varianten verbessern die Tour, landen aber oft in unterschiedlichen lokalen Minima, daher sind die Ergebnisse nicht identisch.
+Nein, die drei 2-opt-Varianten konvergieren nicht immer zum gleichen Tour-Ergebnis, auch wenn sie mit derselben Starttour beginnen.
+Der Grund ist, dass 2-opt ein lokaler Suchalgorithmus ist, der nur lokale Verbesserungen durch 2-Kanten-Tausche betrachtet. Abhängig von der Strategie (first-improvement, full-scan, best-improvement) werden unterschiedliche Verbesserungsreihenfolgen gewählt, wodurch die Suche unterschiedliche Pfade im Lösungsraum nimmt.
+Dadurch können unterschiedliche lokale Minima erreicht werden, obwohl alle Varianten nur lokale Verbesserungen zulassen.
+2) C++ ist in deinem Benchmark typischerweise 10× bis über 100× schneller als Python, abhängig von Instanzgröße und Variante. Der Speedup ist bei kleinen Instanzen am größten und bleibt bei großen Instanzen stabil hoch.
+3) Mit steigender Thread-Zahl (1 → 8) bleibt die Lösungsgüte meist ähnlich oder wird leicht besser, weil mehr unabhängige Starts ausprobiert werden und dadurch bessere lokale Minima gefunden werden können, aber es gibt keine Garantie, dass die Lösungen tatsächlich besser werden.
+Die Wall-clock-Zeit sinkt zunächst deutlich (bis ca. 4 Threads), verbessert sich danach aber kaum noch bzw. kann wegen Overhead und CPU-Limits stagnieren.
+

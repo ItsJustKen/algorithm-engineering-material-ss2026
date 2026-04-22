@@ -19,36 +19,40 @@ def first_improvement_two_opt(
 
     deadline = time.perf_counter() + timeout
 
-    while True:
+    improved = True
+    while improved:
         improved = False
 
         for i in range(n - 1):
             for j in range(i + 2, n):
 
-                # skip adjacent cyclic edge
+               
                 if i == 0 and j == n - 1:
                     continue
 
+                
                 if time.perf_counter() > deadline:
                     return tour
 
                 a, b = tour[i], tour[i + 1]
                 c, d = tour[j], tour[(j + 1) % n]
 
-                current = _dist(points, a, b) + _dist(points, c, d)
-                new = _dist(points, a, c) + _dist(points, b, d)
-
-                delta = new - current
+                
+                delta = (
+                    _dist(points, a, c)
+                    + _dist(points, b, d)
+                    - _dist(points, a, b)
+                    - _dist(points, c, d)
+                )
 
                 if delta < 0:
-                    tour[i + 1:j + 1] = reversed(tour[i + 1:j + 1])
+                    
+                    tour[i + 1 : j + 1] = reversed(tour[i + 1 : j + 1])
+
                     improved = True
-                    break  # first improvement found → restart
+                    break  #
 
             if improved:
-                break
-
-        if not improved:
-            break
+                break  
 
     return tour
