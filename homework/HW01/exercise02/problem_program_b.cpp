@@ -21,58 +21,40 @@ using Index = std::size_t;
  * instead of having a fixed seed).
  */
 class Graph {
-  public:
-    explicit Graph(std::vector<std::vector<Index>> adjacencies) :
-        m_adjacencies(std::move(adjacencies))
+public:
+    explicit Graph(std::vector<std::vector<Index>> adj) : 
+        m_n(adj.size()), 
+        m_words_per_row((adj.size() + 63) / 64) 
     {
-        // the adjacency list should be sorted
-        assert(
-            std::ranges::all_of(m_adjacencies, [] (const std::vector<Index>& neighbors) {
-                return std::ranges::is_sorted(neighbors);
-            })
-        );
-        // the adjacency list should not contain duplicates
-        assert(
-            std::ranges::all_of(m_adjacencies, [] (const std::vector<Index>& neighbors) {
-                return std::ranges::adjacent_find(neighbors) == neighbors.end();
-            })
-        );
-        // the adjacency list should stay in range
-        std::size_t num_vertices = m_adjacencies.size();
-        assert(
-            std::ranges::all_of(m_adjacencies, [num_vertices] (const std::vector<Index>& neighbors) {
-                return std::ranges::all_of(neighbors, [num_vertices] (Index v) {
-                    return v < num_vertices;
-                });
-            })
-        );
+        m_adj_matrix.assign(m_n * m_words_per_row, 0ULL);
+        m_adj_list = std::move(adj);
+
+        for (Index i = 0; i < m_n; ++i) {
+            for (Index neighbor : m_adj_list[i]) {
+                m_adj_matrix[i * m_words_per_row + (neighbor / 64)] |= (1ULL << (neighbor % 64));
+            }
+        }
     }
 
-    const std::vector<Index>& neighbors(Index v) const {
-        return m_adjacencies[v];
+    inline const uint64_t* row(Index v) const {
+        return &m_adj_matrix[v * m_words_per_row];
     }
 
-    std::size_t n() const {
-        return m_adjacencies.size();
-    }
+    const std::vector<Index>& neighbors(Index v) const { return m_adj_list[v]; }
+    std::size_t n() const { return m_n; }
+    std::size_t words_per_row() const { return m_words_per_row; }
 
-  private:
-    std::vector<std::vector<Index>> m_adjacencies;
+private:
+    std::size_t m_n;
+    std::size_t m_words_per_row;
+    std::vector<uint64_t> m_adj_matrix;
+    std::vector<std::vector<Index>> m_adj_list;
 };
 
-/**
- * Load a graph from a file.
- * This may be quite slow; we do not care about
- * the time it takes here.
- */
 Graph load_graph(const std::filesystem::path& path) {
-    std::ifstream input;
-    input.exceptions(std::ios::failbit | std::ios::badbit);
-    input.open(path);
-    input.exceptions(std::ios::badbit);
+    std::ifstream input(path);
     auto parsed = nlohmann::json::parse(input);
-    auto vec = parsed.get<std::vector<std::vector<Index>>>();
-    return Graph(std::move(vec));
+    return Graph(parsed.get<std::vector<std::vector<Index>>>());
 }
 
 /**
@@ -82,67 +64,52 @@ Graph load_graph(const std::filesystem::path& path) {
  *   a viable extension of the current clique.
  */
 class GreedyClique {
-  public:
-    GreedyClique(const Graph* graph) :
-        rng(1337),
-        graph(graph),
-        order(graph->n())
+public:
+    GreedyClique(const Graph* g) : 
+        rng(1337), 
+        graph(g), 
+        order(g->n()), 
+        possible_ext(g->words_per_row()) 
     {
         std::iota(order.begin(), order.end(), Index(0));
     }
 
     const std::vector<Index>& random_order_greedy_clique() {
         std::ranges::shuffle(order, rng);
+        clique_members.clear();
+        
         Index v0 = order[0];
-        clique_members.assign(1, v0);
-        possible_extensions.clear();
-        possible_extensions.insert(graph->neighbors(v0).begin(), 
-                                   graph->neighbors(v0).end());
-        for(Index v : order | std::views::drop(1)) {
-            if(!possible_extensions.count(v)) {
-                continue;
-            }
-            clique_members.push_back(v);
-            // remove all the elements from possible_extensions that
-            // are not neighbors of v, using the fact that the adjacency
-            // list is sorted
-            const auto& neighbors = graph->neighbors(v);
-            auto next_neighbor_it = neighbors.begin();
-            auto end_neighbor_it = neighbors.end();
-            for(auto it = possible_extensions.begin(); 
-                it != possible_extensions.end();) 
-            {
-                // binary search for *it in remaining neighbors
-                auto first_not_lower = std::lower_bound(
-                    next_neighbor_it, end_neighbor_it, *it);
-                if(first_not_lower == end_neighbor_it) {
-                    // all remaining possible extensions are larger than any neighbor
-                    possible_extensions.erase(it, possible_extensions.end());
-                    break;
+        clique_members.push_back(v0);
+        
+        const uint64_t* v0_neighbors = graph->row(v0);
+        std::copy(v0_neighbors, v0_neighbors + graph->words_per_row(), possible_ext.begin());
+
+        for (std::size_t i = 1; i < order.size(); ++i) {
+            Index v = order[i];
+            
+            if (possible_ext[v / 64] & (1ULL << (v % 64))) {
+                clique_members.push_back(v);
+                
+                const uint64_t* v_neighbors = graph->row(v);
+                bool any_left = false;
+                for (std::size_t w = 0; w < possible_ext.size(); ++w) {
+                    possible_ext[w] &= v_neighbors[w];
+                    if (possible_ext[w]) any_left = true;
                 }
-                // restrict future binary searches to the remaining neighbors
-                next_neighbor_it = first_not_lower;
-                if(*first_not_lower == *it) {
-                    // *it is a neighbor, keep it as possible extension
-                    ++it;
-                } else {
-                    // *it is not a neighbor, remove it from possible extensions
-                    it = possible_extensions.erase(it);
-                }
+                
+                if (!any_left) break;
             }
-            if(possible_extensions.empty()) break;
         }
         return clique_members;
     }
 
-  private:
+private:
     const Graph* graph;
     std::mt19937_64 rng;
     std::vector<Index> order;
-    std::set<Index> possible_extensions;
+    std::vector<uint64_t> possible_ext;
     std::vector<Index> clique_members;
 };
-
 std::vector<Index> greedy_clique(const Graph& graph, std::size_t num_attempts) {
     GreedyClique greedy_clique(&graph);
     std::vector<Index> best_clique;
